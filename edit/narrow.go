@@ -11,6 +11,7 @@ import (
 	"github.com/elves/elvish/eval"
 	"github.com/elves/elvish/eval/types"
 	"github.com/elves/elvish/eval/vartypes"
+	"github.com/xiaq/persistent/hashmap"
 )
 
 var _ = registerBuiltins(modeNarrow, map[string]func(*Editor){
@@ -325,7 +326,7 @@ type narrowItem interface {
 
 type narrowOptions struct {
 	AutoCommit        bool
-	Bindings          types.Map
+	Bindings          hashmap.Map
 	IgnoreDuplication bool
 	IgnoreCase        bool
 	KeepBottom        bool
@@ -352,7 +353,7 @@ func (s *narrowItemString) FilterText() string {
 }
 
 type narrowItemComplex struct {
-	types.Map
+	hashmap.Map
 }
 
 func (c *narrowItemComplex) Content() string {

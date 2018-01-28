@@ -105,14 +105,17 @@ func assoc(ec *Frame, args []types.Value, opts map[string]types.Value) {
 	ec.OutputChan() <- result
 }
 
+var errCannotDissoc = errors.New("cannot dissoc")
+
 func dissoc(ec *Frame, args []types.Value, opts map[string]types.Value) {
-	var (
-		a types.Dissocer
-		k types.Value
-	)
+	var a, k types.Value
 	ScanArgs(args, &a, &k)
 	TakeNoOpt(opts)
-	ec.OutputChan() <- a.Dissoc(k)
+	a2 := types.Dissoc(a, k)
+	if a2 == nil {
+		throw(errCannotDissoc)
+	}
+	ec.OutputChan() <- a2
 }
 
 func all(ec *Frame, args []types.Value, opts map[string]types.Value) {

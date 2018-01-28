@@ -8,6 +8,7 @@ import (
 	"github.com/elves/elvish/eval/types"
 	"github.com/elves/elvish/eval/vartypes"
 	"github.com/elves/elvish/util"
+	"github.com/xiaq/persistent/hashmap"
 )
 
 var (
@@ -38,7 +39,7 @@ var (
 )
 
 func (ed *Editor) lookupMatcher(name string) (eval.Fn, bool) {
-	m := ed.variables["-matcher"].Get().(types.Map)
+	m := ed.variables["-matcher"].Get().(hashmap.Map)
 	key := name
 	if !m.HasKey(key) {
 		// Use fallback matcher

@@ -20,11 +20,3 @@ type IteratePairer interface {
 	// receiver. The iteration is aborted if the function returns false.
 	IteratePair(func(k, v Value) bool)
 }
-
-// Dissocer is anything tha can return a slightly modified version of itself with
-// the specified key removed, as a new value.
-type Dissocer interface {
-	// Dissoc returns a slightly modified version of the receiver with key k
-	// dissociated with any value.
-	Dissoc(k Value) Value
-}
