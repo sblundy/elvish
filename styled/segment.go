@@ -15,8 +15,8 @@ type Segment struct {
 	Text string
 }
 
-// UnstyledSegment returns an Segment containing the given text with no style.
-func UnstyledSegment(s string) *Segment {
+// PlainSegment returns an Segment containing the given text with no style.
+func PlainSegment(s string) *Segment {
 	return &Segment{Text: s}
 }
 
@@ -118,4 +118,19 @@ func (s *Segment) RConcat(v interface{}) (interface{}, error) {
 func (s *Segment) Clone() *Segment {
 	value := *s
 	return &value
+}
+
+// CountRune counts the number of times a rune occurs in a Segment.
+func (s *Segment) CountRune(r rune) int {
+	return strings.Count(s.Text, string(r))
+}
+
+// SplitByRune splits a Segment by the given rune.
+func (s *Segment) SplitByRune(r rune) []*Segment {
+	splitTexts := strings.Split(s.Text, string(r))
+	splitSegs := make([]*Segment, len(splitTexts))
+	for i, splitText := range splitTexts {
+		splitSegs[i] = &Segment{s.Style, splitText}
+	}
+	return splitSegs
 }

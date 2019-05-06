@@ -7,16 +7,16 @@ import (
 	"os/user"
 	"sync"
 
+	"github.com/elves/elvish/cli/clicore"
+	"github.com/elves/elvish/cli/prompt"
 	"github.com/elves/elvish/eval"
 	"github.com/elves/elvish/eval/vals"
 	"github.com/elves/elvish/eval/vars"
-	"github.com/elves/elvish/newedit/core"
-	"github.com/elves/elvish/newedit/prompt"
 	"github.com/elves/elvish/styled"
 	"github.com/elves/elvish/util"
 )
 
-func makePrompt(nt notifier, ev *eval.Evaler, ns eval.Ns, computeInit eval.Callable, name string) core.Prompt {
+func makePrompt(nt notifier, ev *eval.Evaler, ns eval.Ns, computeInit eval.Callable, name string) clicore.Prompt {
 	compute := computeInit
 	ns[name] = vars.FromPtr(&compute)
 	return prompt.New(func() styled.Text {
@@ -45,11 +45,11 @@ func init() {
 }
 
 func getDefaultPrompt(isRoot bool) eval.Callable {
-	p := styled.Unstyled("> ")
+	p := styled.Plain("> ")
 	if isRoot {
-		p = styled.Transform(styled.Unstyled("# "), "red")
+		p = styled.Transform(styled.Plain("# "), "red")
 	}
-	return eval.NewBuiltinFn("default prompt", func(fm *eval.Frame) {
+	return eval.NewGoFn("default prompt", func(fm *eval.Frame) {
 		out := fm.OutputChan()
 		out <- string(util.Getwd())
 		out <- p
@@ -57,8 +57,8 @@ func getDefaultPrompt(isRoot bool) eval.Callable {
 }
 
 func getDefaultRPrompt(username, hostname string) eval.Callable {
-	rp := styled.Transform(styled.Unstyled(username+"@"+hostname), "inverse")
-	return eval.NewBuiltinFn("default rprompt", func(fm *eval.Frame) {
+	rp := styled.Transform(styled.Plain(username+"@"+hostname), "inverse")
+	return eval.NewGoFn("default rprompt", func(fm *eval.Frame) {
 		fm.OutputChan() <- rp
 	})
 }

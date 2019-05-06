@@ -1,40 +1,40 @@
 package newedit
 
 import (
+	"github.com/elves/elvish/cli/clitypes"
+	"github.com/elves/elvish/cli/cliutil"
+	"github.com/elves/elvish/cli/insert"
 	"github.com/elves/elvish/edit/tty"
 	"github.com/elves/elvish/eval"
 	"github.com/elves/elvish/eval/vals"
 	"github.com/elves/elvish/eval/vars"
-	"github.com/elves/elvish/newedit/editutil"
-	"github.com/elves/elvish/newedit/insert"
-	"github.com/elves/elvish/newedit/types"
 	"github.com/xiaq/persistent/hashmap"
 )
 
 // Initializes states for the insert mode and its API.
-func initInsert(ed editor, ev *eval.Evaler) (*insert.Mode, eval.Ns) {
+func initInsert(a app, ev *eval.Evaler) (*insert.Mode, eval.Ns) {
 	// Underlying abbreviation map and binding map.
 	abbr := vals.EmptyMap
-	binding := EmptyBindingMap
+	binding := emptyBindingMap
 
 	m := &insert.Mode{
-		KeyHandler:  keyHandlerFromBinding(ed, ev, &binding),
+		KeyHandler:  keyHandlerFromBindings(a, ev, &binding),
 		AbbrIterate: func(cb func(a, f string)) { abbrIterate(abbr, cb) },
 	}
 
-	st := ed.State()
+	st := a.State()
 
 	ns := eval.Ns{
 		"binding": vars.FromPtr(&binding),
 		"abbr":    vars.FromPtr(&abbr),
 		"quote-paste": vars.FromPtrWithMutex(
 			&m.Config.Raw.QuotePaste, &m.Config.Mutex),
-	}.AddBuiltinFns("<edit:insert>:", map[string]interface{}{
+	}.AddGoFns("<edit:insert>:", map[string]interface{}{
 		"start": func() { st.SetMode(m) },
 		"default-handler": func() error {
-			action := editutil.BasicHandler(tty.KeyEvent(st.BindingKey()), st)
-			if action != types.NoAction {
-				return editutil.ActionError(action)
+			action := cliutil.BasicHandler(tty.KeyEvent(st.BindingKey()), st)
+			if action != clitypes.NoAction {
+				return cliutil.ActionError(action)
 			}
 			return nil
 		},

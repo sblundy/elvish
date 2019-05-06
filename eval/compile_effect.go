@@ -13,7 +13,7 @@ import (
 	"github.com/xiaq/persistent/hashmap"
 )
 
-func (cp *compiler) chunk(n *parse.Chunk) opBody {
+func (cp *compiler) chunk(n *parse.Chunk) effectOpBody {
 	return chunkOp{cp.pipelineOps(n.Pipelines)}
 }
 
@@ -37,7 +37,7 @@ func (op chunkOp) invoke(fm *Frame) error {
 	return nil
 }
 
-func (cp *compiler) pipeline(n *parse.Pipeline) opBody {
+func (cp *compiler) pipeline(n *parse.Pipeline) effectOpBody {
 	return &pipelineOp{n.Background, n.SourceText(), cp.formOps(n.Forms)}
 }
 
@@ -134,13 +134,12 @@ func (op *pipelineOp) invoke(fm *Frame) error {
 			}
 		}()
 		return nil
-	} else {
-		wg.Wait()
-		return ComposeExceptionsFromPipeline(errors)
 	}
+	wg.Wait()
+	return ComposeExceptionsFromPipeline(errors)
 }
 
-func (cp *compiler) form(n *parse.Form) opBody {
+func (cp *compiler) form(n *parse.Form) effectOpBody {
 	var saveVarsOps []lvaluesOp
 	var assignmentOps []effectOp
 	if len(n.Assignments) > 0 {
@@ -159,7 +158,7 @@ func (cp *compiler) form(n *parse.Form) opBody {
 	// Depending on the type of the form, exactly one of the three below will be
 	// set.
 	var (
-		specialOpFunc  opBody
+		specialOpFunc  effectOpBody
 		headOp         valuesOp
 		spaceyAssignOp effectOp
 	)
@@ -230,7 +229,7 @@ type formOp struct {
 	saveVarsOps    []lvaluesOp
 	assignmentOps  []effectOp
 	redirOps       []effectOp
-	specialOpBody  opBody
+	specialOpBody  effectOpBody
 	headOp         valuesOp
 	argOps         []valuesOp
 	optsOp         valuesOpBody
@@ -344,9 +343,8 @@ func (op *formOp) invoke(fm *Frame) (errRet error) {
 
 	if headFn != nil {
 		return headFn.Call(fm, args, convertedOpts)
-	} else {
-		return op.spaceyAssignOp.exec(fm)
 	}
+	return op.spaceyAssignOp.exec(fm)
 }
 
 func allTrue(vs []interface{}) bool {
@@ -358,7 +356,7 @@ func allTrue(vs []interface{}) bool {
 	return true
 }
 
-func (cp *compiler) assignment(n *parse.Assignment) opBody {
+func (cp *compiler) assignment(n *parse.Assignment) effectOpBody {
 	variablesOp, restOp := cp.lvaluesOp(n.Left)
 	valuesOp := cp.compoundOp(n.Right)
 	return &assignmentOp{variablesOp, restOp, valuesOp}
@@ -383,16 +381,6 @@ func (op *assignmentOp) invoke(fm *Frame) (errRet error) {
 	if err != nil {
 		return err
 	}
-
-	// If any LHS ends up being nil, assign an empty string to all of them.
-	//
-	// This is to fix #176, which only happens in the top level of REPL; in
-	// other cases, a failure in the evaluation of the RHS causes this
-	// level to fail, making the variables unaccessible.
-	//
-	// XXX(xiaq): Should think about how to get rid of this.
-	defer fixNilVariables(variables, &errRet)
-	defer fixNilVariables(rest, &errRet)
 
 	values, err := op.valuesOp.exec(fm)
 	if err != nil {
@@ -454,7 +442,7 @@ func (cp *compiler) literal(n *parse.Primary, msg string) string {
 const defaultFileRedirPerm = 0644
 
 // redir compiles a Redir into a op.
-func (cp *compiler) redir(n *parse.Redir) opBody {
+func (cp *compiler) redir(n *parse.Redir) effectOpBody {
 	var dstOp valuesOp
 	if n.Left != nil {
 		dstOp = cp.compoundOp(n.Left)
@@ -544,7 +532,7 @@ func (op *redirOp) invoke(fm *Frame) error {
 			}
 		case vals.File:
 			fm.ports[dst] = &Port{
-				File: src.Inner, Chan: BlackholeChan,
+				File: src, Chan: BlackholeChan,
 				CloseFile: false,
 			}
 		case vals.Pipe:

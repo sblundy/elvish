@@ -6,40 +6,55 @@ import (
 	"os"
 	"sync"
 
+	"github.com/elves/elvish/cli/clitypes"
+	"github.com/elves/elvish/cli/cliutil"
 	"github.com/elves/elvish/edit/eddefs"
 	"github.com/elves/elvish/edit/ui"
 	"github.com/elves/elvish/eval"
 	"github.com/elves/elvish/eval/vals"
-	"github.com/elves/elvish/newedit/editutil"
-	"github.com/elves/elvish/newedit/types"
 )
 
 // TODO(xiaq): Move the implementation into this package.
 
-// BindingMap is a specialized map type for key bindings.
-type BindingMap = eddefs.BindingMap
+// A specialized map type for key bindings.
+type bindingMap = eddefs.BindingMap
 
-// EmptyBindingMap is an empty binding map. It is useful for building binding
-// maps.
-var EmptyBindingMap = eddefs.EmptyBindingMap
+// An empty binding map. It is useful for building binding maps.
+var emptyBindingMap = eddefs.EmptyBindingMap
 
-func keyHandlerFromBinding(ed editor, ev *eval.Evaler, m *BindingMap) func(ui.Key) types.HandlerAction {
-	return func(k ui.Key) types.HandlerAction {
-		f := m.GetOrDefault(k)
+func keyHandlerFromBindings(a app, ev *eval.Evaler, bs ...*bindingMap) func(ui.Key) clitypes.HandlerAction {
+	return func(k ui.Key) clitypes.HandlerAction {
+		f := indexLayeredBindings(k, bs...)
 		// TODO: Make this fallback part of GetOrDefault after moving BindingMap
 		// into this package.
 		if f == nil {
-			ed.Notify("Unbound: " + k.String())
-			return types.NoAction
+			a.Notify("Unbound: " + k.String())
+			return clitypes.NoAction
 		}
-		ed.State().SetBindingKey(k)
-		return callBinding(ed, ev, f)
+		a.State().SetBindingKey(k)
+		return callBinding(a, ev, f)
 	}
+}
+
+// Indexes a series of layered bindings. Returns nil if none of the bindings
+// have the required key or a default.
+func indexLayeredBindings(k ui.Key, bindings ...*bindingMap) eval.Callable {
+	for _, binding := range bindings {
+		if binding.HasKey(k) {
+			return binding.GetKey(k)
+		}
+	}
+	for _, binding := range bindings {
+		if binding.HasKey(ui.Default) {
+			return binding.GetKey(ui.Default)
+		}
+	}
+	return nil
 }
 
 var bindingSource = eval.NewInternalSource("[editor binding]")
 
-func callBinding(nt notifier, ev *eval.Evaler, f eval.Callable) types.HandlerAction {
+func callBinding(nt notifier, ev *eval.Evaler, f eval.Callable) clitypes.HandlerAction {
 
 	// TODO(xiaq): Use CallWithOutputCallback when it supports redirecting the
 	// stderr port.
@@ -51,13 +66,13 @@ func callBinding(nt notifier, ev *eval.Evaler, f eval.Callable) types.HandlerAct
 	err := frame.Call(f, nil, eval.NoOpts)
 
 	if err != nil {
-		if action, ok := eval.Cause(err).(editutil.ActionError); ok {
-			return types.HandlerAction(action)
+		if action, ok := eval.Cause(err).(cliutil.ActionError); ok {
+			return clitypes.HandlerAction(action)
 		}
 		// TODO(xiaq): Make the stack trace available.
 		nt.Notify("[binding error] " + err.Error())
 	}
-	return types.NoAction
+	return clitypes.NoAction
 }
 
 func makeNotifyPort(notify func(string)) (*eval.Port, func()) {

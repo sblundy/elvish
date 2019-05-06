@@ -1,6 +1,7 @@
 package vals
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -53,16 +54,16 @@ func ScanToGo(src interface{}, ptr interface{}) error {
 		return ptr.ScanElvish(src)
 	default:
 		// Do a generic `*ptr = src` via reflection
-		ptrType := reflect.TypeOf(ptr)
+		ptrType := TypeOf(ptr)
 		if ptrType.Kind() != reflect.Ptr {
 			return fmt.Errorf("need pointer to scan into, got %T", ptr)
 		}
 		dstType := ptrType.Elem()
-		if !reflect.TypeOf(src).AssignableTo(dstType) {
+		if !TypeOf(src).AssignableTo(dstType) {
 			return fmt.Errorf("need %s, got %s",
 				Kind(reflect.Zero(dstType).Interface()), Kind(src))
 		}
-		reflect.ValueOf(ptr).Elem().Set(reflect.ValueOf(src))
+		ValueOf(ptr).Elem().Set(ValueOf(src))
 		return nil
 	}
 }
@@ -79,8 +80,6 @@ func FromGo(a interface{}) interface{} {
 	switch a := a.(type) {
 	case int:
 		return strconv.Itoa(a)
-	case float64:
-		return strconv.FormatFloat(a, 'g', -1, 64)
 	case rune:
 		return string(a)
 	default:
@@ -89,31 +88,43 @@ func FromGo(a interface{}) interface{} {
 }
 
 func elvToFloat(arg interface{}) (float64, error) {
-	if _, ok := arg.(string); !ok {
-		return 0, fmt.Errorf("must be string")
-	}
-	s := arg.(string)
-	num, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		num, err2 := strconv.ParseInt(s, 0, 64)
-		if err2 != nil {
-			return 0, err
+	switch arg := arg.(type) {
+	case float64:
+		return arg, nil
+	case string:
+		f, err := strconv.ParseFloat(arg, 64)
+		if err == nil {
+			return f, nil
 		}
-		return float64(num), nil
+		i, err := strconv.ParseInt(arg, 0, 64)
+		if err == nil {
+			return float64(i), err
+		}
+		return 0, err
+	default:
+		return 0, fmt.Errorf("must be float64 or string")
 	}
-	return num, nil
 }
 
+var errMustBeInteger = errors.New("must be integer")
+
 func elvToInt(arg interface{}) (int, error) {
-	arg, ok := arg.(string)
-	if !ok {
-		return 0, fmt.Errorf("must be string")
+	switch arg := arg.(type) {
+	case float64:
+		i := int(arg)
+		if float64(i) != arg {
+			return 0, errMustBeInteger
+		}
+		return i, nil
+	case string:
+		num, err := strconv.ParseInt(arg, 0, 0)
+		if err != nil {
+			return 0, err
+		}
+		return int(num), nil
+	default:
+		return 0, errMustBeInteger
 	}
-	num, err := strconv.ParseInt(arg.(string), 0, 0)
-	if err != nil {
-		return 0, err
-	}
-	return int(num), nil
 }
 
 func elvToRune(arg interface{}) (rune, error) {

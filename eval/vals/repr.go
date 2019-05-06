@@ -2,6 +2,7 @@ package vals
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/elves/elvish/parse"
 	"github.com/elves/elvish/util"
@@ -27,13 +28,13 @@ type Reprer interface {
 // Repr returns the representation for a value, a string that is preferably (but
 // not necessarily) an Elvish expression that evaluates to the argument. If
 // indent >= 0, the representation is pretty-printed. It is implemented for the
-// builtin types bool and string, and types satisfying the listReprable,
-// mapReprable or Reprer interface. For other types, it uses fmt.Sprint with the
-// format "<unknown %v>".
+// builtin types nil, bool and string, the File, List and Map types, StructMap
+// types, and types satisfying the Reprer interface. For other types, it uses
+// fmt.Sprint with the format "<unknown %v>".
 func Repr(v interface{}, indent int) string {
 	switch v := v.(type) {
-	case Reprer:
-		return v.Repr(indent)
+	case nil:
+		return "$nil"
 	case bool:
 		if v {
 			return "$true"
@@ -41,24 +42,36 @@ func Repr(v interface{}, indent int) string {
 		return "$false"
 	case string:
 		return parse.Quote(v)
-	case listReprable:
-		b := ListReprBuilder{Indent: indent}
+	case float64:
+		return fmt.Sprintf("(float64 %g)", v)
+	case File:
+		return fmt.Sprintf("<file{%s %d}>", parse.Quote(v.Name()), v.Fd())
+	case List:
+		b := NewListReprBuilder(indent)
 		for it := v.Iterator(); it.HasElem(); it.Next() {
 			b.WriteElem(Repr(it.Elem(), indent+1))
 		}
 		return b.String()
-	case mapReprable:
-		builder := MapReprBuilder{}
-		builder.Indent = indent
+	case Map:
+		builder := NewMapReprBuilder(indent)
 		for it := v.Iterator(); it.HasElem(); it.Next() {
 			k, v := it.Elem()
 			builder.WritePair(Repr(k, indent+1), indent+2, Repr(v, indent+2))
 		}
 		return builder.String()
+	case StructMap:
+		info := getStructMapInfo(reflect.TypeOf(v))
+		vv := reflect.ValueOf(v)
+		n := vv.NumField()
+		builder := NewMapReprBuilder(indent)
+		for i := 0; i < n; i++ {
+			builder.WritePair(Repr(info.fieldNames[i], indent+1),
+				indent+2, Repr(vv.Field(i).Interface(), indent+2))
+		}
+		return builder.String()
+	case Reprer:
+		return v.Repr(indent)
 	default:
 		return fmt.Sprintf("<unknown %v>", v)
 	}
 }
-
-type listReprable listIterable
-type mapReprable mapIterable

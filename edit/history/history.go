@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/elves/elvish/cli/histutil"
 	"github.com/elves/elvish/edit/eddefs"
 	"github.com/elves/elvish/edit/ui"
 	"github.com/elves/elvish/eval"
@@ -22,18 +23,18 @@ var logger = util.GetLogger("[edit/history] ")
 type hist struct {
 	ed      eddefs.Editor
 	mutex   sync.RWMutex
-	fuser   *Fuser
+	fuser   *histutil.Fuser
 	binding eddefs.BindingMap
 
 	// Non-persistent state.
-	walker    *Walker
+	walker    histutil.Walker
 	bufferLen int
 }
 
 func Init(ed eddefs.Editor, ns eval.Ns) {
 	hist := &hist{ed: ed, binding: eddefs.EmptyBindingMap}
 	if ed.Daemon() != nil {
-		fuser, err := NewFuser(ed.Daemon())
+		fuser, err := histutil.NewFuser(ed.Daemon())
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Failed to initialize command history; disabled.")
 		} else {
@@ -49,7 +50,7 @@ func Init(ed eddefs.Editor, ns eval.Ns) {
 		"binding": vars.FromPtr(&hist.binding),
 		"list":    vars.NewReadOnly(List{&hist.mutex, ed.Daemon()}),
 	}
-	historyNs.AddBuiltinFns("edit:history:", map[string]interface{}{
+	historyNs.AddGoFns("edit:history:", map[string]interface{}{
 		"start":        hist.start,
 		"up":           hist.up,
 		"down":         hist.down,
@@ -62,7 +63,7 @@ func Init(ed eddefs.Editor, ns eval.Ns) {
 	histlistNs := eval.Ns{
 		"binding": vars.FromPtr(&histlistBinding),
 	}
-	histlistNs.AddBuiltinFns("edit:histlist:", map[string]interface{}{
+	histlistNs.AddGoFns("edit:histlist:", map[string]interface{}{
 		"start": func() {
 			hl.start(ed, hist.fuser, histlistBinding)
 		},
@@ -73,7 +74,7 @@ func Init(ed eddefs.Editor, ns eval.Ns) {
 	ns.AddNs("history", historyNs)
 	ns.AddNs("histlist", histlistNs)
 	// TODO(xiaq): Rename and put in edit:history
-	ns.AddBuiltinFn("edit:", "command-history", hist.commandHistory)
+	ns.AddGoFn("edit:", "command-history", hist.commandHistory)
 }
 
 func (h *hist) Teardown() {
@@ -105,7 +106,7 @@ func (hist *hist) start() {
 	buffer, dot := ed.Buffer()
 	prefix := buffer[:dot]
 	walker := hist.fuser.Walker(prefix)
-	_, _, err := walker.Prev()
+	err := walker.Prev()
 
 	if err == nil {
 		hist.walker = walker
@@ -117,21 +118,21 @@ func (hist *hist) start() {
 }
 
 func (hist *hist) up() {
-	_, _, err := hist.walker.Prev()
+	err := hist.walker.Prev()
 	if err != nil {
 		hist.ed.Notify("%s", err)
 	}
 }
 
 func (hist *hist) down() {
-	_, _, err := hist.walker.Next()
+	err := hist.walker.Next()
 	if err != nil {
 		hist.ed.Notify("%s", err)
 	}
 }
 
 func (hist *hist) downOrQuit() {
-	_, _, err := hist.walker.Next()
+	err := hist.walker.Next()
 	if err != nil {
 		hist.ed.SetModeInsert()
 	}
@@ -154,7 +155,7 @@ func (hist *hist) appendHistory(line string) {
 	if hist.fuser != nil {
 		hist.mutex.Lock()
 		go func() {
-			err := hist.fuser.AddCmd(line)
+			_, err := hist.fuser.AddCmd(line)
 			hist.mutex.Unlock()
 			if err != nil {
 				logger.Printf("Failed to AddCmd %q: %v", line, err)
@@ -196,7 +197,7 @@ func (hist *hist) commandHistory(fm *eval.Frame, args ...int) {
 	}
 
 	for i := start; i < end; i++ {
-		out <- vals.MakeMapFromKV(
+		out <- vals.MakeMap(
 			"id", strconv.Itoa(i),
 			"cmd", cmds[i],
 		)

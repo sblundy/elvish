@@ -4,25 +4,14 @@ import (
 	"errors"
 	"strconv"
 	"strings"
-
-	"github.com/xiaq/persistent/vector"
 )
 
 var (
-	errIndexMustBeString = errors.New("index must be string")
-	errIndexMustBeNumber = errors.New("index or slice component must be number")
-	errIndexOutOfRange   = errors.New("index out of range")
+	errIndexMustBeInteger = errors.New("index must must be integer")
+	errIndexOutOfRange    = errors.New("index out of range")
 )
 
-type listIndexable interface {
-	Lener
-	Index(int) (interface{}, bool)
-	SubVector(int, int) vector.Vector
-}
-
-var _ listIndexable = vector.Vector(nil)
-
-func indexList(l listIndexable, rawIndex interface{}) (interface{}, error) {
+func indexList(l List, rawIndex interface{}) (interface{}, error) {
 	index, err := ConvertListIndex(rawIndex, l.Len())
 	if err != nil {
 		return nil, err
@@ -45,30 +34,40 @@ type ListIndex struct {
 // ConvertListIndex parses a list index, check whether it is valid, and returns
 // the converted structure.
 func ConvertListIndex(rawIndex interface{}, n int) (*ListIndex, error) {
-	s, ok := rawIndex.(string)
-	if !ok {
-		return nil, errIndexMustBeString
-	}
-	slice, i, j, err := parseListIndex(s, n)
-	if err != nil {
-		return nil, err
-	}
-	if i < 0 {
-		i += n
-	}
-	if j < 0 {
-		j += n
-	}
-	if slice {
-		if !(0 <= i && i <= j && j <= n) {
-			return nil, errIndexOutOfRange
+	switch rawIndex := rawIndex.(type) {
+	case float64:
+		index := int(rawIndex)
+		if rawIndex != float64(index) {
+			return nil, errIndexMustBeInteger
 		}
-	} else {
-		if !(0 <= i && i < n) {
-			return nil, errIndexOutOfRange
+		if index < 0 {
+			index += n
 		}
+		return &ListIndex{false, index, 0}, nil
+	case string:
+		slice, i, j, err := parseListIndex(rawIndex, n)
+		if err != nil {
+			return nil, err
+		}
+		if i < 0 {
+			i += n
+		}
+		if j < 0 {
+			j += n
+		}
+		if slice {
+			if !(0 <= i && i <= j && j <= n) {
+				return nil, errIndexOutOfRange
+			}
+		} else {
+			if !(0 <= i && i < n) {
+				return nil, errIndexOutOfRange
+			}
+		}
+		return &ListIndex{slice, i, j}, nil
+	default:
+		return nil, errIndexMustBeInteger
 	}
-	return &ListIndex{slice, i, j}, nil
 }
 
 // ListIndex = Number |
@@ -111,7 +110,7 @@ func atoi(a string) (int, error) {
 		if err.(*strconv.NumError).Err == strconv.ErrRange {
 			return 0, errIndexOutOfRange
 		}
-		return 0, errIndexMustBeNumber
+		return 0, errIndexMustBeInteger
 	}
 	return i, nil
 }

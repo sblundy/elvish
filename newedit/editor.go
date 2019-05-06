@@ -1,13 +1,16 @@
 package newedit
 
 import (
+	"fmt"
 	"os"
 
+	"github.com/elves/elvish/cli/clicore"
+	"github.com/elves/elvish/cli/histutil"
 	"github.com/elves/elvish/eval"
 	"github.com/elves/elvish/eval/vars"
-	"github.com/elves/elvish/newedit/core"
 	"github.com/elves/elvish/newedit/highlight"
 	"github.com/elves/elvish/parse"
+	"github.com/elves/elvish/store/storedefs"
 )
 
 // Editor is the interface line editor for Elvish.
@@ -17,45 +20,73 @@ import (
 //
 // TODO: Rename ReadLine to ReadCode and remove Close.
 type Editor struct {
-	core *core.Editor
-	ns   eval.Ns
+	app *clicore.App
+	ns  eval.Ns
 }
 
 // NewEditor creates a new editor from input and output terminal files.
-func NewEditor(in, out *os.File, ev *eval.Evaler) *Editor {
-	ed := core.NewEditor(core.NewTTY(in, out), core.NewSignalSource())
+func NewEditor(in, out *os.File, ev *eval.Evaler, st storedefs.Store) *Editor {
+	app := clicore.NewAppFromFiles(in, out)
 
-	ed.Highlighter = highlight.NewHighlighter(
+	app.Highlighter = highlight.NewHighlighter(
 		highlight.Dep{Check: makeCheck(ev), HasCommand: makeHasCommand(ev)})
 
 	ns := eval.NewNs().
 		Add("max-height",
-			vars.FromPtrWithMutex(&ed.Config.Raw.MaxHeight, &ed.Config.Mutex)).
-		AddBuiltinFns("<edit>", map[string]interface{}{
+			vars.FromPtrWithMutex(&app.Config.Raw.MaxHeight, &app.Config.Mutex)).
+		AddGoFns("<edit>", map[string]interface{}{
 			"binding-map":  makeBindingMap,
 			"exit-binding": exitBinding,
 			"commit-code":  commitCode,
 			"commit-eof":   commitEOF,
+			"reset-mode":   makeResetMode(app.State()),
 		}).
-		AddBuiltinFns("<edit>", bufferBuiltins(ed.State()))
+		AddGoFns("<edit>", bufferBuiltins(app.State()))
 
-	// Hooks
-	ns["before-readline"], ed.BeforeReadline = initBeforeReadline(ev)
-	ns["after-readline"], ed.AfterReadline = initAfterReadline(ev)
+	histFuser, err := histutil.NewFuser(st)
+	if err == nil {
+		// Add the builtin hook of appending history in after-readline.
+		app.AddAfterReadline(func(code string) {
+			_, err := histFuser.AddCmd(code)
+			if err != nil {
+				fmt.Fprintln(out, "failed to add command to history")
+			}
+		})
+	} else {
+		fmt.Fprintln(out, "failed to initialize history facilities")
+	}
+
+	// Elvish hook APIs
+	var beforeReadline func()
+	ns["before-readline"], beforeReadline = initBeforeReadline(ev)
+	app.AddBeforeReadline(beforeReadline)
+	var afterReadline func(string)
+	ns["after-readline"], afterReadline = initAfterReadline(ev)
+	app.AddAfterReadline(afterReadline)
 
 	// Prompts
-	ed.Prompt = makePrompt(ed, ev, ns, defaultPrompt, "prompt")
-	ed.RPrompt = makePrompt(ed, ev, ns, defaultRPrompt, "rprompt")
+	app.Prompt = makePrompt(app, ev, ns, defaultPrompt, "prompt")
+	app.RPrompt = makePrompt(app, ev, ns, defaultRPrompt, "rprompt")
 
 	// Insert mode
-	insertMode, insertNs := initInsert(ed, ev)
-	ed.InitMode = insertMode
+	insertMode, insertNs := initInsert(app, ev)
+	app.InitMode = insertMode
 	ns.AddNs("insert", insertNs)
+
+	// Listing modes.
+	lsMode, lsBinding, lsNs := initListing(app)
+	ns.AddNs("listing", lsNs)
+
+	lastcmdNs := initLastcmd(app, ev, st, lsMode, lsBinding)
+	ns.AddNs("lastcmd", lastcmdNs)
+
+	histlistNs := initHistlist(app, ev, histFuser.AllCmds, lsMode, lsBinding)
+	ns.AddNs("histlist", histlistNs)
 
 	// Evaluate default bindings.
 	evalDefaultBinding(ev, ns)
 
-	return &Editor{ed, ns}
+	return &Editor{app, ns}
 }
 
 func evalDefaultBinding(ev *eval.Evaler, ns eval.Ns) {
@@ -85,7 +116,7 @@ func evalDefaultBinding(ev *eval.Evaler, ns eval.Ns) {
 
 // ReadLine reads input from the user.
 func (ed *Editor) ReadLine() (string, error) {
-	return ed.core.ReadCode()
+	return ed.app.ReadCode()
 }
 
 // Ns returns a namespace for manipulating the editor from Elvish code.

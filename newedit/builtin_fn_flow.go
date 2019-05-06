@@ -1,8 +1,8 @@
 package newedit
 
 import (
-	"github.com/elves/elvish/newedit/editutil"
-	"github.com/elves/elvish/newedit/types"
+	"github.com/elves/elvish/cli/clitypes"
+	"github.com/elves/elvish/cli/cliutil"
 )
 
 //elvdoc:fn exit-binding
@@ -11,7 +11,7 @@ import (
 // special exception.
 
 func exitBinding() error {
-	return editutil.ActionError(types.NoAction)
+	return cliutil.ActionError(clitypes.NoAction)
 }
 
 //elvdoc:fn commit-code
@@ -20,7 +20,7 @@ func exitBinding() error {
 // code it just read. Internally, this works by raising a special exception.
 
 func commitCode() error {
-	return editutil.ActionError(types.CommitCode)
+	return cliutil.ActionError(clitypes.CommitCode)
 }
 
 //elvdoc:fn commit-eof
@@ -29,5 +29,5 @@ func commitCode() error {
 // special exception.
 
 func commitEOF() error {
-	return editutil.ActionError(types.CommitEOF)
+	return cliutil.ActionError(clitypes.CommitEOF)
 }

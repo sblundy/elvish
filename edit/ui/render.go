@@ -1,5 +1,9 @@
 package ui
 
+import (
+	"github.com/elves/elvish/util"
+)
+
 // Renderer wraps the Render method.
 type Renderer interface {
 	// Render renders onto a Buffer.
@@ -17,6 +21,29 @@ func Render(r Renderer, width int) *Buffer {
 	return bb.Buffer()
 }
 
+// NewStringRenderer returns a Renderer that shows the given strings unstyled,
+// trimmed to fit whatever width is available.
+func NewStringRenderer(s string) Renderer {
+	return NewLinesRenderer(s)
+}
+
+// NewLinesRenderer returns a Renderer that shows the given lines unstyled,
+// each trimmed to fit whatever width is available.
+func NewLinesRenderer(lines ...string) Renderer {
+	return linesRenderer{lines}
+}
+
+type linesRenderer struct{ lines []string }
+
+func (r linesRenderer) Render(bb *BufferBuilder) {
+	for i, line := range r.lines {
+		if i > 0 {
+			bb.Newline()
+		}
+		bb.WriteString(util.TrimWcwidth(line, bb.Width), "")
+	}
+}
+
 // NewModeLineRenderer returns a Renderer for a mode line.
 func NewModeLineRenderer(title, filter string) Renderer {
 	return modeLineRenderer{title, filter}
@@ -31,9 +58,13 @@ func (ml modeLineRenderer) Render(bb *BufferBuilder) {
 	bb.WriteString(ml.title, styleForMode.String())
 	bb.WriteSpaces(1, "")
 	bb.WriteString(ml.filter, styleForFilter.String())
-	bb.Dot = bb.Cursor()
+	bb.SetDotToCursor()
 }
 
+// NewModeLineWithScrollBarRenderer returns a Renderer for a mode line with a
+// horizontal scroll bar. The base argument should be a Renderer built with
+// NewModeLineRenderer; the arguments n, low and high describes the range of the
+// scroll bar.
 func NewModeLineWithScrollBarRenderer(base Renderer, n, low, high int) Renderer {
 	return &modeLineWithScrollBarRenderer{base, n, low, high}
 }
@@ -51,4 +82,22 @@ func (ml modeLineWithScrollBarRenderer) Render(bb *BufferBuilder) {
 		bb.WriteSpaces(1, "")
 		writeHorizontalScrollbar(bb, ml.n, ml.low, ml.high, scrollbarWidth)
 	}
+}
+
+// NewRendererWithVerticalScrollbar returns a Renderer that renders the given
+// base plus a vertical scrollbar at the right-hand side.
+func NewRendererWithVerticalScrollbar(base Renderer, n, low, high int) Renderer {
+	return rendererWithVerticalScrollbar{base, n, low, high}
+}
+
+type rendererWithVerticalScrollbar struct {
+	base         Renderer
+	n, low, high int
+}
+
+func (r rendererWithVerticalScrollbar) Render(bb *BufferBuilder) {
+	bufBase := Render(r.base, bb.Width-1)
+	bb.ExtendRight(bufBase, 0)
+	bufScrollbar := renderVerticalScrollbar(r.n, r.low, r.high, len(bufBase.Lines))
+	bb.ExtendRight(bufScrollbar, bb.Width-1)
 }

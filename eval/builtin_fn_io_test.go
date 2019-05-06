@@ -9,6 +9,7 @@ import (
 func TestBuiltinFnIO(t *testing.T) {
 	Test(t,
 		That(`put foo bar`).Puts("foo", "bar"),
+		That(`put $nil`).Puts(nil),
 
 		That(`print [foo bar]`).Prints("[foo bar]"),
 		That(`print foo bar &sep=,`).Prints("foo,bar"),
@@ -25,10 +26,10 @@ func TestBuiltinFnIO(t *testing.T) {
 		That(`print "a\nb" | from-lines`).Puts("a", "b"),
 		That(`print "a\nb\n" | from-lines`).Puts("a", "b"),
 		That(`echo '{"k": "v", "a": [1, 2]}' '"foo"' | from-json`).
-			Puts(vals.MakeMap(map[interface{}]interface{}{
-				"k": "v",
-				"a": vals.MakeList("1", "2")}),
+			Puts(vals.MakeMap("k", "v", "a", vals.MakeList(1.0, 2.0)),
 				"foo"),
+		That(`echo '[null, "foo"]' | from-json`).Puts(
+			vals.MakeList(nil, "foo")),
 		That(`echo 'invalid' | from-json`).Errors(),
 
 		That(`put "l\norem" ipsum | to-lines`).Prints("l\norem\nipsum\n"),
@@ -36,5 +37,6 @@ func TestBuiltinFnIO(t *testing.T) {
 			Prints(`{"a":["1","2"],"k":"v"}
 "foo"
 `),
+		That(`put [$nil foo] | to-json`).Prints("[null,\"foo\"]\n"),
 	)
 }

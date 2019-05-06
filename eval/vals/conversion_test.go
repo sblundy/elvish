@@ -15,7 +15,7 @@ type someType struct {
 // pointer to the destination, an initial value to the destination is supplied
 // and the result is returned.
 func scanToGo2(src interface{}, dstInit interface{}) (interface{}, error) {
-	ptr := reflect.New(reflect.TypeOf(dstInit))
+	ptr := reflect.New(TypeOf(dstInit))
 	err := ScanToGo(src, ptr.Interface())
 	return ptr.Elem().Interface(), err
 }
@@ -23,12 +23,15 @@ func scanToGo2(src interface{}, dstInit interface{}) (interface{}, error) {
 var scanToGoTests = tt.Table{
 	Args("12", 0).Rets(12),
 	Args("0x12", 0).Rets(0x12),
+	Args(12.0, 0).Rets(12),
 	Args("23", 0.0).Rets(23.0),
 	Args("0x23", 0.0).Rets(float64(0x23)),
 	Args("x", ' ').Rets('x'),
 	Args("foo", "").Rets("foo"),
 	Args(someType{"foo"}, someType{}).Rets(someType{"foo"}),
+	Args(nil, nil).Rets(nil),
 
+	Args(0.5, 0).Rets(0, errMustBeInteger),
 	Args("x", someType{}).Rets(any, anyError),
 	Args(someType{}, 0).Rets(any, anyError),
 	Args("x", 0).Rets(any, anyError),
@@ -45,8 +48,9 @@ func TestScanToGo(t *testing.T) {
 
 var fromGoTests = tt.Table{
 	tt.Args(12).Rets("12"),
-	tt.Args(1.5).Rets("1.5"),
+	tt.Args(1.5).Rets(1.5),
 	tt.Args('x').Rets("x"),
+	tt.Args(nil).Rets(nil),
 	tt.Args(someType{"foo"}).Rets(someType{"foo"}),
 }
 

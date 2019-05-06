@@ -9,12 +9,13 @@ import (
 var (
 	li0 = EmptyList
 	li4 = MakeList("foo", "bar", "lorem", "ipsum")
-	m   = MakeMapFromKV("foo", "bar", "lorem", "ipsum")
+	m   = MakeMap("foo", "bar", "lorem", "ipsum")
 )
 
 var indexTests = tt.Table{
 	// String indicies
 	Args("abc", "0").Rets("a", nil),
+	Args("abc", 0.0).Rets("a", nil),
 	Args("你好", "0").Rets("你", nil),
 	Args("你好", "3").Rets("好", nil),
 	Args("你好", "2").Rets(any, errIndexNotAtRuneBoundary),
@@ -40,6 +41,12 @@ var indexTests = tt.Table{
 	// Decimal indicies are not allowed even if the value is an integer.
 	Args(li4, "0.0").Rets(any, anyError),
 
+	// Float64 indicies are allowed as long as they are integers.
+	Args(li4, 0.0).Rets("foo", nil),
+	Args(li4, 3.0).Rets("ipsum", nil),
+	Args(li4, -1.0).Rets("ipsum", nil),
+	Args(li4, 0.5).Rets(any, anyError),
+
 	// Slice indicies: 0 <= i <= j <= n.
 	Args(li4, "1:3").Rets(eq(MakeList("bar", "lorem")), nil),
 	Args(li4, "3:4").Rets(eq(MakeList("ipsum")), nil),
@@ -64,6 +71,10 @@ var indexTests = tt.Table{
 
 	Args(m, "foo").Rets("bar", nil),
 	Args(m, "bad").Rets(any, anyError),
+
+	// StructMap indicies
+	Args(testStructMap{"foo", 1.0}, "name").Rets("foo", nil),
+	Args(testStructMap{"foo", 1.0}, "bad").Rets(nil, NoSuchKey("bad")),
 }
 
 func TestIndex(t *testing.T) {

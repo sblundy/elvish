@@ -2,8 +2,6 @@ package vals
 
 import (
 	"reflect"
-
-	"github.com/xiaq/persistent/hashmap"
 )
 
 // Equaler wraps the Equal method.
@@ -14,37 +12,47 @@ type Equaler interface {
 }
 
 // Equal returns whether two values are equal. It is implemented for the builtin
-// types bool and string, and types satisfying the listEqualable, mapEqualable
-// or Equaler interface. For other types, it uses reflect.DeepEqual to compare
-// the two values.
+// types bool and string, the File, List, Map types, StructMap types, and types
+// satisfying the Equaler interface. For other types, it uses reflect.DeepEqual
+// to compare the two values.
 func Equal(x, y interface{}) bool {
 	switch x := x.(type) {
-	case Equaler:
-		return x.Equal(y)
+	case nil:
+		return x == y
 	case bool:
+		return x == y
+	case float64:
 		return x == y
 	case string:
 		return x == y
-	case listEqualable:
-		if yy, ok := y.(listEqualable); ok {
+	case File:
+		if yy, ok := y.(File); ok {
+			return x.Fd() == yy.Fd()
+		}
+		return false
+	case List:
+		if yy, ok := y.(List); ok {
 			return equalList(x, yy)
 		}
 		return false
-	case mapEqualable:
-		if yy, ok := y.(mapEqualable); ok {
+	case Map:
+		if yy, ok := y.(Map); ok {
 			return equalMap(x, yy)
 		}
 		return false
+	case StructMap:
+		if yy, ok := y.(StructMap); ok {
+			return equalStructMap(x, yy)
+		}
+		return false
+	case Equaler:
+		return x.Equal(y)
+	default:
+		return reflect.DeepEqual(x, y)
 	}
-	return reflect.DeepEqual(x, y)
 }
 
-type listEqualable interface {
-	Lener
-	listIterable
-}
-
-func equalList(x, y listEqualable) bool {
+func equalList(x, y List) bool {
 	if x.Len() != y.Len() {
 		return false
 	}
@@ -60,15 +68,7 @@ func equalList(x, y listEqualable) bool {
 	return true
 }
 
-type mapEqualable interface {
-	Lener
-	Index(interface{}) (interface{}, bool)
-	Iterator() hashmap.Iterator
-}
-
-var _ mapEqualable = hashmap.Map(nil)
-
-func equalMap(x, y mapEqualable) bool {
+func equalMap(x, y Map) bool {
 	if x.Len() != y.Len() {
 		return false
 	}
@@ -76,6 +76,21 @@ func equalMap(x, y mapEqualable) bool {
 		k, vx := it.Elem()
 		vy, ok := y.Index(k)
 		if !ok || !Equal(vx, vy) {
+			return false
+		}
+	}
+	return true
+}
+
+func equalStructMap(x, y StructMap) bool {
+	if reflect.TypeOf(x) != reflect.TypeOf(y) {
+		return false
+	}
+	xv := reflect.ValueOf(x)
+	yv := reflect.ValueOf(y)
+	n := xv.NumField()
+	for i := 0; i < n; i++ {
+		if !Equal(xv.Field(i).Interface(), yv.Field(i).Interface()) {
 			return false
 		}
 	}

@@ -2,6 +2,7 @@ package vals
 
 import (
 	"errors"
+	"reflect"
 )
 
 // Indexer wraps the Index method.
@@ -33,12 +34,22 @@ func (err noSuchKeyError) Error() string {
 	return "no such key: " + Repr(err.key, NoPretty)
 }
 
-// Index indexes a value with the given key. It is implemented for types
-// satisfying the ErrIndexer or Indexer interface, types satisfying the
-// listIndexable interface (which covers Vector), and the builtin string type.
-// For other types, it returns a nil value and a non-nil error.
+// Index indexes a value with the given key. It is implemented for the builtin
+// type string, the List type, StructMap types, and types satisfying the
+// ErrIndexer or Indexer interface (the Map type satisfies Indexer). For other
+// types, it returns a nil value and a non-nil error.
 func Index(a, k interface{}) (interface{}, error) {
 	switch a := a.(type) {
+	case string:
+		return indexString(a, k)
+	case List:
+		return indexList(a, k)
+	case StructMap:
+		fieldName, ok := k.(string)
+		if !ok {
+			return nil, NoSuchKey(k)
+		}
+		return indexStructMap(a, fieldName)
 	case ErrIndexer:
 		return a.Index(k)
 	case Indexer:
@@ -47,11 +58,17 @@ func Index(a, k interface{}) (interface{}, error) {
 			return nil, NoSuchKey(k)
 		}
 		return v, nil
-	case listIndexable:
-		return indexList(a, k)
-	case string:
-		return indexString(a, k)
 	default:
 		return nil, errNotIndexable
 	}
+}
+
+func indexStructMap(a StructMap, k string) (interface{}, error) {
+	info := getStructMapInfo(reflect.TypeOf(a))
+	for i, fieldName := range info.fieldNames {
+		if k == fieldName {
+			return FromGo(reflect.ValueOf(a).Field(i).Interface()), nil
+		}
+	}
+	return nil, NoSuchKey(k)
 }

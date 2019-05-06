@@ -1,6 +1,6 @@
 package eval
 
-// Builtin functions.
+// Misc builtin functions.
 
 import (
 	"fmt"
@@ -51,7 +51,7 @@ func kindOf(fm *Frame, args ...interface{}) {
 
 func constantly(args ...interface{}) Callable {
 	// XXX Repr of this fn is not right
-	return NewBuiltinFn(
+	return NewGoFn(
 		"created by constantly",
 		func(fm *Frame) {
 			out := fm.ports[1].Chan
@@ -69,14 +69,12 @@ func resolve(fm *Frame, head string) string {
 	_, special := builtinSpecials[head]
 	if special {
 		return "special"
-	} else {
-		explode, ns, name := ParseVariableRef(head)
-		if !explode && fm.ResolveVar(ns, name+FnSuffix) != nil {
-			return "$" + head + FnSuffix
-		} else {
-			return "(external " + parse.Quote(head) + ")"
-		}
 	}
+	explode, ns, name := ParseVariableRef(head)
+	if !explode && fm.ResolveVar(ns, name+FnSuffix) != nil {
+		return "$" + head + FnSuffix
+	}
+	return "(external " + parse.Quote(head) + ")"
 }
 
 func source(fm *Frame, fname string) error {

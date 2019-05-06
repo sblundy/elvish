@@ -1,6 +1,9 @@
 package vals
 
 import (
+	"math"
+	"reflect"
+
 	"github.com/xiaq/persistent/hash"
 )
 
@@ -11,9 +14,9 @@ type Hasher interface {
 }
 
 // Hash returns the 32-bit hash of a value. It is implemented for the builtin
-// types bool and string, and types satisfying the listHashable, mapHashable or
-// Hasher interface. For other values, it returns 0 (which is OK in terms of
-// correctness).
+// types bool and string, the File, List, Map types, StructMap types, and types
+// satisfying the Hasher interface. For other values, it returns 0 (which is OK
+// in terms of correctness).
 func Hash(v interface{}) uint32 {
 	switch v := v.(type) {
 	case bool:
@@ -21,13 +24,19 @@ func Hash(v interface{}) uint32 {
 			return 1
 		}
 		return 0
-	case listHashable:
+	case float64:
+		return hash.UInt64(math.Float64bits(v))
+	case string:
+		return hash.String(v)
+	case File:
+		return hash.UIntPtr(v.Fd())
+	case List:
 		h := hash.DJBInit
 		for it := v.Iterator(); it.HasElem(); it.Next() {
 			h = hash.DJBCombine(h, Hash(it.Elem()))
 		}
 		return h
-	case mapIterable:
+	case Map:
 		h := hash.DJBInit
 		for it := v.Iterator(); it.HasElem(); it.Next() {
 			k, v := it.Elem()
@@ -35,13 +44,16 @@ func Hash(v interface{}) uint32 {
 			h = hash.DJBCombine(h, Hash(v))
 		}
 		return h
-	case string:
-		return hash.String(v)
+	case StructMap:
+		h := hash.DJBInit
+		vv := reflect.ValueOf(v)
+		n := reflect.TypeOf(v).NumField()
+		for i := 0; i < n; i++ {
+			h = hash.DJBCombine(h, Hash(vv.Field(i).Interface()))
+		}
+		return h
 	case Hasher:
 		return v.Hash()
 	}
 	return 0
 }
-
-type listHashable listIterable
-type mapHashable mapIterable

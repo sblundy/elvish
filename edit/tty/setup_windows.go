@@ -12,6 +12,8 @@ const (
 		windows.ENABLE_MOUSE_INPUT | windows.ENABLE_PROCESSED_INPUT
 	wantedOutMode = windows.ENABLE_PROCESSED_OUTPUT |
 		windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING
+	wantedGlobalOutMode = windows.ENABLE_PROCESSED_OUTPUT |
+		windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING
 )
 
 func setup(in, out *os.File) (func() error, error) {
@@ -34,8 +36,22 @@ func setup(in, out *os.File) (func() error, error) {
 
 	return func() error {
 		return util.Errors(
-			windows.SetConsoleMode(hIn, oldInMode),
+			restoreVT(out),
 			windows.SetConsoleMode(hOut, oldOutMode),
-			restoreVT(out))
+			windows.SetConsoleMode(hIn, oldInMode))
 	}, util.Errors(errSetIn, errSetOut, errVT)
+}
+
+func setupGlobal() func() {
+	hOut := windows.Handle(os.Stderr.Fd())
+	var oldOutMode uint32
+	err := windows.GetConsoleMode(hOut, &oldOutMode)
+	if err != nil {
+		return func() {}
+	}
+	err = windows.SetConsoleMode(hOut, wantedGlobalOutMode)
+	if err != nil {
+		return func() {}
+	}
+	return func() { windows.SetConsoleMode(hOut, oldOutMode) }
 }

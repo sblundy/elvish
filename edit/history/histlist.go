@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/elves/elvish/cli/histutil"
 	"github.com/elves/elvish/edit/eddefs"
 	"github.com/elves/elvish/edit/ui"
 )
@@ -17,19 +18,18 @@ import (
 var errStoreOffline = errors.New("store offline")
 
 type histlist struct {
-	all             []string
+	all             []histutil.Entry
 	dedup           bool
 	caseInsensitive bool
 	last            map[string]int
-	shown           []string
-	index           []int
+	shown           []histutil.Entry
 	indexWidth      int
 }
 
-func newHistlist(cmds []string) *histlist {
+func newHistlist(cmds []histutil.Entry) *histlist {
 	last := make(map[string]int)
 	for i, entry := range cmds {
-		last[entry] = i
+		last[entry.Text] = i
 	}
 	return &histlist{
 		// This has to be here for the initialization to work :(
@@ -64,23 +64,21 @@ func (hl *histlist) Len() int {
 }
 
 func (hl *histlist) Show(i int) (string, ui.Styled) {
-	return fmt.Sprintf("%d", hl.index[i]+1), ui.Unstyled(hl.shown[i])
+	return fmt.Sprintf("%d", hl.shown[i].Seq), ui.Unstyled(hl.shown[i].Text)
 }
 
 func (hl *histlist) Filter(filter string) int {
 	hl.shown = nil
-	hl.index = nil
 	dedup := hl.dedup
 	if hl.caseInsensitive {
 		filter = strings.ToLower(filter)
 	}
 	for i, entry := range hl.all {
-		fentry := entry
+		fentry := entry.Text
 		if hl.caseInsensitive {
-			fentry = strings.ToLower(entry)
+			fentry = strings.ToLower(fentry)
 		}
-		if (!dedup || hl.last[entry] == i) && strings.Contains(fentry, filter) {
-			hl.index = append(hl.index, i)
+		if (!dedup || hl.last[entry.Text] == i) && strings.Contains(fentry, filter) {
 			hl.shown = append(hl.shown, entry)
 		}
 	}
@@ -91,7 +89,7 @@ func (hl *histlist) Filter(filter string) int {
 // Editor interface.
 
 func (hl *histlist) Accept(i int, ed eddefs.Editor) {
-	line := hl.shown[i]
+	line := hl.shown[i].Text
 	buffer, _ := ed.Buffer()
 	if len(buffer) > 0 {
 		line = "\n" + line
@@ -99,7 +97,7 @@ func (hl *histlist) Accept(i int, ed eddefs.Editor) {
 	ed.InsertAtDot(line)
 }
 
-func (hl *histlist) start(ed eddefs.Editor, fuser *Fuser, binding eddefs.BindingMap) {
+func (hl *histlist) start(ed eddefs.Editor, fuser *histutil.Fuser, binding eddefs.BindingMap) {
 	cmds, err := getCmds(fuser)
 	if err != nil {
 		ed.Notify("%v", err)
@@ -111,7 +109,7 @@ func (hl *histlist) start(ed eddefs.Editor, fuser *Fuser, binding eddefs.Binding
 	ed.SetModeListing(binding, hl)
 }
 
-func getCmds(fuser *Fuser) ([]string, error) {
+func getCmds(fuser *histutil.Fuser) ([]histutil.Entry, error) {
 	if fuser == nil {
 		return nil, errStoreOffline
 	}
