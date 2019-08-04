@@ -12,8 +12,6 @@
 
     *   An installed `elvish` in your PATH;
 
-    *   Python 2.7 at `/usr/bin/python2.7` (Python scripts should be rewritten in either Go or Elvish).
-
 3.  Always format the code with `goimports` before committing. Run `go get golang.org/x/tools/cmd/goimports` to install `goimports`, and `goimports -w .` to format all golang sources.
 
     To automate this you can set up a `goimports` filter for Git by putting this in `~/.gitconfig`:

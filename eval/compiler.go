@@ -1,6 +1,6 @@
 package eval
 
-//go:generate ./boilerplate.py
+//go:generate elvish ./boilerplate.elv
 
 import (
 	"fmt"
